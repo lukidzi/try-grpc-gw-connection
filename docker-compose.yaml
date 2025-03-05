@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  grpc-server:
+    image: lukdzied/grpc-example:v2
+    container_name: grpc-server
+    command: ["/app/main", "server"]
+    ports:
+      - "50051:50051"
+    networks:
+      - app-network
+    cap_add:
+      - NET_ADMIN  # Allows network modifications (e.g., iptables, tc)
+
+  nginx:
+    image: nginx:latest
+    container_name: nginx-proxy
+    volumes:
+      - ./nginx/grpc.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "10000:10000"
+    depends_on:
+      - grpc-server
+    networks:
+      - app-network
+    cap_add:
+      - NET_ADMIN  # Allows network modifications (e.g., iptables, tc)
+
+  grpc-client:
+    image: lukdzied/grpc-example:v2
+    container_name: grpc-client
+    command: ["/app/main", "client", "-x", "nginx", "-p", "10000"]
+    depends_on:
+      - grpc-server
+      - nginx
+    networks:
+      - app-network
+    cap_add:
+      - NET_ADMIN  # Allows network modifications (e.g., iptables, tc)
+
+networks:
+  app-network:
+    driver: bridge
