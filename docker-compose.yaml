@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   grpc-server:
-    image: lukdzied/grpc-example:v2
+    image: lukdzied/grpc-example:v3
     container_name: grpc-server
     command: ["/app/main", "server"]
     ports:
@@ -27,7 +27,7 @@ services:
       - NET_ADMIN  # Allows network modifications (e.g., iptables, tc)
 
   grpc-client:
-    image: lukdzied/grpc-example:v2
+    image: lukdzied/grpc-example:v3
     container_name: grpc-client
     command: ["/app/main", "client", "-x", "nginx", "-p", "10000"]
     depends_on:
