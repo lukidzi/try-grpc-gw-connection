@@ -5,7 +5,7 @@ package ping;
 option go_package = "./pingpb";
 
 service PingService {
-    rpc PingStream(PingRequest) returns (stream PingResponse);
+    rpc PingStream(stream PingRequest) returns (stream PingResponse);
 }
 
 message PingRequest {

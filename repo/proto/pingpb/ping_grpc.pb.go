@@ -18,7 +18,7 @@ const _ = grpc.SupportPackageIsVersion7
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type PingServiceClient interface {
-	PingStream(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (PingService_PingStreamClient, error)
+	PingStream(ctx context.Context, opts ...grpc.CallOption) (PingService_PingStreamClient, error)
 }
 
 type pingServiceClient struct {
@@ -29,28 +29,27 @@ func NewPingServiceClient(cc grpc.ClientConnInterface) PingServiceClient {
 	return &pingServiceClient{cc}
 }
 
-func (c *pingServiceClient) PingStream(ctx context.Context, in *PingRequest, opts ...grpc.CallOption) (PingService_PingStreamClient, error) {
+func (c *pingServiceClient) PingStream(ctx context.Context, opts ...grpc.CallOption) (PingService_PingStreamClient, error) {
 	stream, err := c.cc.NewStream(ctx, &PingService_ServiceDesc.Streams[0], "/ping.PingService/PingStream", opts...)
 	if err != nil {
 		return nil, err
 	}
 	x := &pingServicePingStreamClient{stream}
-	if err := x.ClientStream.SendMsg(in); err != nil {
-		return nil, err
-	}
-	if err := x.ClientStream.CloseSend(); err != nil {
-		return nil, err
-	}
 	return x, nil
 }
 
 type PingService_PingStreamClient interface {
+	Send(*PingRequest) error
 	Recv() (*PingResponse, error)
 	grpc.ClientStream
 }
 
 type pingServicePingStreamClient struct {
 	grpc.ClientStream
+}
+
+func (x *pingServicePingStreamClient) Send(m *PingRequest) error {
+	return x.ClientStream.SendMsg(m)
 }
 
 func (x *pingServicePingStreamClient) Recv() (*PingResponse, error) {
@@ -65,7 +64,7 @@ func (x *pingServicePingStreamClient) Recv() (*PingResponse, error) {
 // All implementations must embed UnimplementedPingServiceServer
 // for forward compatibility
 type PingServiceServer interface {
-	PingStream(*PingRequest, PingService_PingStreamServer) error
+	PingStream(PingService_PingStreamServer) error
 	mustEmbedUnimplementedPingServiceServer()
 }
 
@@ -73,7 +72,7 @@ type PingServiceServer interface {
 type UnimplementedPingServiceServer struct {
 }
 
-func (UnimplementedPingServiceServer) PingStream(*PingRequest, PingService_PingStreamServer) error {
+func (UnimplementedPingServiceServer) PingStream(PingService_PingStreamServer) error {
 	return status.Errorf(codes.Unimplemented, "method PingStream not implemented")
 }
 func (UnimplementedPingServiceServer) mustEmbedUnimplementedPingServiceServer() {}
@@ -90,15 +89,12 @@ func RegisterPingServiceServer(s grpc.ServiceRegistrar, srv PingServiceServer) {
 }
 
 func _PingService_PingStream_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(PingRequest)
-	if err := stream.RecvMsg(m); err != nil {
-		return err
-	}
-	return srv.(PingServiceServer).PingStream(m, &pingServicePingStreamServer{stream})
+	return srv.(PingServiceServer).PingStream(&pingServicePingStreamServer{stream})
 }
 
 type PingService_PingStreamServer interface {
 	Send(*PingResponse) error
+	Recv() (*PingRequest, error)
 	grpc.ServerStream
 }
 
@@ -108,6 +104,14 @@ type pingServicePingStreamServer struct {
 
 func (x *pingServicePingStreamServer) Send(m *PingResponse) error {
 	return x.ServerStream.SendMsg(m)
+}
+
+func (x *pingServicePingStreamServer) Recv() (*PingRequest, error) {
+	m := new(PingRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 // PingService_ServiceDesc is the grpc.ServiceDesc for PingService service.
@@ -122,6 +126,7 @@ var PingService_ServiceDesc = grpc.ServiceDesc{
 			StreamName:    "PingStream",
 			Handler:       _PingService_PingStream_Handler,
 			ServerStreams: true,
+			ClientStreams: true,
 		},
 	},
 	Metadata: "ping.proto",

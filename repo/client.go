@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"log"
 	"time"
 
@@ -97,38 +98,50 @@ func startClient(port, host string) error {
 			retryDelay = 1 * time.Second // Reset retry delay on success
 		}
 
-		// Attempt gRPC call
-		stream, err := client.PingStream(context.Background(), &pb.PingRequest{Message: "Hello, Server!"})
+		// Open a stream
+		stream, err := client.PingStream(context.Background())
 		if err != nil {
-			if isRecoverableError(err) {
-				log.Printf("Recoverable error: %v. Reconnecting...", err)
-				conn.Close()
-				conn = nil
-				client = nil
-				time.Sleep(retryDelay)
-				retryDelay *= 2
-				if retryDelay > 30*time.Second {
-					retryDelay = 30 * time.Second
-				}
-				continue
-			} else {
-				log.Fatalf("Fatal error: %v. Exiting...", err)
-			}
+			log.Printf("Stream error: %v. Reconnecting...", err)
+			conn.Close()
+			conn = nil
+			client = nil
+			time.Sleep(retryDelay)
+			continue
 		}
 
-		// Process gRPC stream
+		// Send messages continuously
+		go func() {
+			for {
+				err := stream.Send(&pb.PingRequest{Message: "Hello, Server!"})
+				if err != nil {
+					log.Printf("Error sending message: %v", err)
+					conn.Close()
+					conn = nil
+					client = nil
+					break
+				}
+				time.Sleep(2 * time.Second) // Send every 2s
+			}
+		}()
+
+		// Receive messages continuously
 		for {
 			resp, err := stream.Recv()
+			if err == io.EOF {
+				log.Println("Server closed the stream")
+				break
+			}
 			if err != nil {
 				log.Printf("Stream error: %v. Reconnecting...", err)
-				conn.Close()
-				conn = nil
-				client = nil
 				break
 			}
 			fmt.Println("Server Response:", resp.Message)
-			time.Sleep(5 * time.Second)
 		}
+
+		// Cleanup and reconnect
+		conn.Close()
+		conn = nil
+		client = nil
 	}
 }
 

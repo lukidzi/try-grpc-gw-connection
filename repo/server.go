@@ -1,6 +1,7 @@
 package main
 
 import (
+	"io"
 	"log"
 	"net"
 	"time"
@@ -16,17 +17,30 @@ type server struct {
 	pb.UnimplementedPingServiceServer
 }
 
-func (s *server) PingStream(req *pb.PingRequest, stream pb.PingService_PingStreamServer) error {
-	log.Println("Received Ping request:", req.Message)
+func (s *server) PingStream(stream pb.PingService_PingStreamServer) error {
+	log.Println("Client connected to PingStream")
 
-	for i := 0; i < 9999999; i++ { // Send 5 pings
-		if err := stream.Send(&pb.PingResponse{Message: "Pong"}); err != nil {
+	for {
+		req, err := stream.Recv() // Read from the client stream
+		if err == io.EOF {
+			log.Println("Client disconnected")
+			return nil
+		}
+		if err != nil {
+			log.Printf("Error receiving from client: %v", err)
 			return err
 		}
-		time.Sleep(5 * time.Second) // 5-second interval
-	}
 
-	return nil
+		log.Println("Received from client:", req.Message)
+
+		// Send a "Pong" response
+		if err := stream.Send(&pb.PingResponse{Message: "Pong"}); err != nil {
+			log.Printf("Error sending response: %v", err)
+			return err
+		}
+
+		time.Sleep(2 * time.Second) // Simulate processing time
+	}
 }
 
 func startServer(port string) {
@@ -38,11 +52,11 @@ func startServer(port string) {
 	grpcOptions := []grpc.ServerOption{
 		grpc.MaxConcurrentStreams(1000000),
 		grpc.KeepaliveParams(keepalive.ServerParameters{
-			Time:    15 * time.Second,
-			Timeout: 15 * time.Second,
+			Time:    10 * time.Second, // Ping clients every 10s
+			Timeout: 5 * time.Second,  // Wait 5s before closing inactive clients
 		}),
 		grpc.KeepaliveEnforcementPolicy(keepalive.EnforcementPolicy{
-			MinTime:             15 * time.Second,
+			MinTime:             10 * time.Second,
 			PermitWithoutStream: true,
 		}),
 	}
